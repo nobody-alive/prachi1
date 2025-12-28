@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Mario Style Game</title>
+<title>Infinite Mario Game</title>
 <style>
   body {
     margin: 0;
@@ -11,6 +11,7 @@
     justify-content: center;
     align-items: center;
     height: 100vh;
+    font-family: Arial;
   }
   canvas {
     border: 4px solid black;
@@ -26,36 +27,22 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+const gravity = 0.6;
+let level = 1;
+
 // ---------------- PLAYER ----------------
 const player = {
-  x: 50,
-  y: 300,
-  w: 30,
-  h: 40,
-  dx: 0,
-  dy: 0,
+  x: 50, y: 300, w: 30, h: 40,
+  dx: 0, dy: 0,
   speed: 4,
   jump: 12,
   grounded: false,
-  direction: 1 // 1 = right, -1 = left
+  dir: 1
 };
 
 // ---------------- WORLD ----------------
-const gravity = 0.6;
-const platforms = [
-  {x:0, y:360, w:800, h:40},
-  {x:200, y:280, w:120, h:20},
-  {x:400, y:230, w:120, h:20},
-  {x:600, y:180, w:120, h:20}
-];
-
-// ---------------- ENEMIES ----------------
-let enemies = [
-  {x: 500, y: 330, w: 30, h: 30, dx: -1.2, alive: true},
-  {x: 650, y: 330, w: 30, h: 30, dx: 1.2, alive: true}
-];
-
-// ---------------- FIREBALLS ----------------
+let platforms = [];
+let enemies = [];
 let fireballs = [];
 
 // ---------------- INPUT ----------------
@@ -63,29 +50,68 @@ const keys = {};
 document.addEventListener("keydown", e => {
   keys[e.key] = true;
 
-  // Shoot fireball
   if (e.key === "f" || e.key === "F") {
     fireballs.push({
       x: player.x + player.w / 2,
       y: player.y + player.h / 2,
       r: 5,
-      dx: player.direction * 7
+      dx: player.dir * 7
     });
   }
 });
 document.addEventListener("keyup", e => keys[e.key] = false);
 
+// ---------------- LEVEL GENERATION ----------------
+function generateLevel() {
+  platforms = [];
+  enemies = [];
+  fireballs = [];
+
+  // Ground
+  platforms.push({ x: 0, y: 360, w: 800, h: 40 });
+
+  // Random platforms
+  let platformCount = 3 + Math.floor(level * 0.7);
+  for (let i = 0; i < platformCount; i++) {
+    platforms.push({
+      x: Math.random() * 650 + 50,
+      y: Math.random() * 200 + 100,
+      w: Math.random() * 100 + 80,
+      h: 20
+    });
+  }
+
+  // Enemies
+  let enemyCount = Math.min(2 + level, 10);
+  for (let i = 0; i < enemyCount; i++) {
+    enemies.push({
+      x: Math.random() * 700 + 50,
+      y: 330,
+      w: 30,
+      h: 30,
+      dx: Math.random() < 0.5 ? -1.2 : 1.2,
+      alive: true
+    });
+  }
+
+  // Reset player
+  player.x = 50;
+  player.y = 300;
+  player.dy = 0;
+}
+
+generateLevel();
+
 // ---------------- UPDATE ----------------
 function update() {
-  // Movement
   player.dx = 0;
   if (keys["ArrowLeft"]) {
     player.dx = -player.speed;
-    player.direction = -1;
+    player.dir = -1;
   }
   if (keys["ArrowRight"]) {
     player.dx = player.speed;
-    player.direction = 1;
+    player.dir = 1;
   }
 
   if ((keys["ArrowUp"] || keys[" "]) && player.grounded) {
@@ -117,26 +143,23 @@ function update() {
   if (player.x + player.w > canvas.width)
     player.x = canvas.width - player.w;
 
-  // ---------------- ENEMY LOGIC ----------------
-  enemies.forEach(enemy => {
-    if (!enemy.alive) return;
+  // Enemies
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    e.x += e.dx;
 
-    enemy.x += enemy.dx;
+    if (e.x < 0 || e.x + e.w > canvas.width)
+      e.dx *= -1;
 
-    // Bounce off edges
-    if (enemy.x < 0 || enemy.x + enemy.w > canvas.width)
-      enemy.dx *= -1;
-
-    // Player vs Enemy
+    // Player collision
     if (
-      player.x < enemy.x + enemy.w &&
-      player.x + player.w > enemy.x &&
-      player.y < enemy.y + enemy.h &&
-      player.y + player.h > enemy.y
+      player.x < e.x + e.w &&
+      player.x + player.w > e.x &&
+      player.y < e.y + e.h &&
+      player.y + player.h > e.y
     ) {
-      // Jump kill
       if (player.dy > 0) {
-        enemy.alive = false;
+        e.alive = false;
         player.dy = -8;
       } else {
         gameOver();
@@ -144,31 +167,36 @@ function update() {
     }
   });
 
-  // ---------------- FIREBALL LOGIC ----------------
+  // Fireballs
   fireballs.forEach((f, i) => {
     f.x += f.dx;
 
-    // Remove offscreen
     if (f.x < 0 || f.x > canvas.width)
       fireballs.splice(i, 1);
 
-    // Hit enemy
-    enemies.forEach(enemy => {
-      if (!enemy.alive) return;
+    enemies.forEach(e => {
+      if (!e.alive) return;
       if (
-        f.x > enemy.x &&
-        f.x < enemy.x + enemy.w &&
-        f.y > enemy.y &&
-        f.y < enemy.y + enemy.h
+        f.x > e.x &&
+        f.x < e.x + e.w &&
+        f.y > e.y &&
+        f.y < e.y + e.h
       ) {
-        enemy.alive = false;
+        e.alive = false;
         fireballs.splice(i, 1);
       }
     });
   });
 
+  // Level cleared
+  if (enemies.every(e => !e.alive)) {
+    level++;
+    generateLevel();
+  }
+
   // Fall death
-  if (player.y > canvas.height) gameOver();
+  if (player.y > canvas.height)
+    gameOver();
 }
 
 // ---------------- DRAW ----------------
@@ -197,9 +225,14 @@ function draw() {
     ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
     ctx.fill();
   });
+
+  // HUD
+  ctx.fillStyle = "black";
+  ctx.font = "18px Arial";
+  ctx.fillText("Level: " + level, 10, 25);
 }
 
-// ---------------- GAME LOOP ----------------
+// ---------------- LOOP ----------------
 function loop() {
   update();
   draw();
@@ -207,7 +240,7 @@ function loop() {
 }
 
 function gameOver() {
-  alert("Game Over!");
+  alert("Game Over! Reached Level " + level);
   location.reload();
 }
 
