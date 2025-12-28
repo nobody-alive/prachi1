@@ -6,15 +6,15 @@
 <style>
   body {
     margin: 0;
-    background: skyblue;
+    background: #5c94fc;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
   }
   canvas {
-    background: #5c94fc;
     border: 4px solid black;
+    background: skyblue;
   }
 </style>
 </head>
@@ -26,103 +26,189 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Player
+// ---------------- PLAYER ----------------
 const player = {
   x: 50,
   y: 300,
-  width: 30,
-  height: 40,
+  w: 30,
+  h: 40,
   dx: 0,
   dy: 0,
   speed: 4,
-  jumpPower: 12,
-  grounded: false
+  jump: 12,
+  grounded: false,
+  direction: 1 // 1 = right, -1 = left
 };
 
-// Platforms
+// ---------------- WORLD ----------------
+const gravity = 0.6;
 const platforms = [
-  { x: 0, y: 360, width: 800, height: 40 },
-  { x: 200, y: 280, width: 120, height: 20 },
-  { x: 400, y: 230, width: 120, height: 20 },
-  { x: 600, y: 180, width: 120, height: 20 }
+  {x:0, y:360, w:800, h:40},
+  {x:200, y:280, w:120, h:20},
+  {x:400, y:230, w:120, h:20},
+  {x:600, y:180, w:120, h:20}
 ];
 
-const gravity = 0.6;
-const keys = {};
+// ---------------- ENEMIES ----------------
+let enemies = [
+  {x: 500, y: 330, w: 30, h: 30, dx: -1.2, alive: true},
+  {x: 650, y: 330, w: 30, h: 30, dx: 1.2, alive: true}
+];
 
-// Controls
-document.addEventListener("keydown", e => keys[e.key] = true);
+// ---------------- FIREBALLS ----------------
+let fireballs = [];
+
+// ---------------- INPUT ----------------
+const keys = {};
+document.addEventListener("keydown", e => {
+  keys[e.key] = true;
+
+  // Shoot fireball
+  if (e.key === "f" || e.key === "F") {
+    fireballs.push({
+      x: player.x + player.w / 2,
+      y: player.y + player.h / 2,
+      r: 5,
+      dx: player.direction * 7
+    });
+  }
+});
 document.addEventListener("keyup", e => keys[e.key] = false);
 
+// ---------------- UPDATE ----------------
 function update() {
   // Movement
   player.dx = 0;
-  if (keys["ArrowLeft"]) player.dx = -player.speed;
-  if (keys["ArrowRight"]) player.dx = player.speed;
+  if (keys["ArrowLeft"]) {
+    player.dx = -player.speed;
+    player.direction = -1;
+  }
+  if (keys["ArrowRight"]) {
+    player.dx = player.speed;
+    player.direction = 1;
+  }
 
-  // Jump
   if ((keys["ArrowUp"] || keys[" "]) && player.grounded) {
-    player.dy = -player.jumpPower;
+    player.dy = -player.jump;
     player.grounded = false;
   }
 
-  // Apply gravity
   player.dy += gravity;
-
   player.x += player.dx;
   player.y += player.dy;
 
-  // Collision with platforms
+  // Platform collisions
   player.grounded = false;
   platforms.forEach(p => {
     if (
-      player.x < p.x + p.width &&
-      player.x + player.width > p.x &&
-      player.y + player.height < p.y + p.height &&
-      player.y + player.height + player.dy >= p.y
+      player.x < p.x + p.w &&
+      player.x + player.w > p.x &&
+      player.y + player.h <= p.y + 10 &&
+      player.y + player.h + player.dy >= p.y
     ) {
       player.dy = 0;
-      player.y = p.y - player.height;
+      player.y = p.y - player.h;
       player.grounded = true;
     }
   });
 
   // Boundaries
   if (player.x < 0) player.x = 0;
-  if (player.x + player.width > canvas.width)
-    player.x = canvas.width - player.width;
+  if (player.x + player.w > canvas.width)
+    player.x = canvas.width - player.w;
 
-  // Fall = death
-  if (player.y > canvas.height) {
-    alert("Game Over!");
-    reset();
-  }
+  // ---------------- ENEMY LOGIC ----------------
+  enemies.forEach(enemy => {
+    if (!enemy.alive) return;
+
+    enemy.x += enemy.dx;
+
+    // Bounce off edges
+    if (enemy.x < 0 || enemy.x + enemy.w > canvas.width)
+      enemy.dx *= -1;
+
+    // Player vs Enemy
+    if (
+      player.x < enemy.x + enemy.w &&
+      player.x + player.w > enemy.x &&
+      player.y < enemy.y + enemy.h &&
+      player.y + player.h > enemy.y
+    ) {
+      // Jump kill
+      if (player.dy > 0) {
+        enemy.alive = false;
+        player.dy = -8;
+      } else {
+        gameOver();
+      }
+    }
+  });
+
+  // ---------------- FIREBALL LOGIC ----------------
+  fireballs.forEach((f, i) => {
+    f.x += f.dx;
+
+    // Remove offscreen
+    if (f.x < 0 || f.x > canvas.width)
+      fireballs.splice(i, 1);
+
+    // Hit enemy
+    enemies.forEach(enemy => {
+      if (!enemy.alive) return;
+      if (
+        f.x > enemy.x &&
+        f.x < enemy.x + enemy.w &&
+        f.y > enemy.y &&
+        f.y < enemy.y + enemy.h
+      ) {
+        enemy.alive = false;
+        fireballs.splice(i, 1);
+      }
+    });
+  });
+
+  // Fall death
+  if (player.y > canvas.height) gameOver();
 }
 
-function reset() {
-  player.x = 50;
-  player.y = 300;
-  player.dy = 0;
-}
-
+// ---------------- DRAW ----------------
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Player
   ctx.fillStyle = "red";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  ctx.fillRect(player.x, player.y, player.w, player.h);
 
   // Platforms
   ctx.fillStyle = "green";
-  platforms.forEach(p =>
-    ctx.fillRect(p.x, p.y, p.width, p.height)
-  );
+  platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
+
+  // Enemies
+  ctx.fillStyle = "brown";
+  enemies.forEach(e => {
+    if (e.alive)
+      ctx.fillRect(e.x, e.y, e.w, e.h);
+  });
+
+  // Fireballs
+  ctx.fillStyle = "orange";
+  fireballs.forEach(f => {
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
+// ---------------- GAME LOOP ----------------
 function loop() {
   update();
   draw();
   requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  alert("Game Over!");
+  location.reload();
 }
 
 loop();
