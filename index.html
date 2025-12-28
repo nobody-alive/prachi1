@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mario Style Game</title>
+<style>
+  body {
+    margin: 0;
+    background: skyblue;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  canvas {
+    background: #5c94fc;
+    border: 4px solid black;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="800" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// Player
+const player = {
+  x: 50,
+  y: 300,
+  width: 30,
+  height: 40,
+  dx: 0,
+  dy: 0,
+  speed: 4,
+  jumpPower: 12,
+  grounded: false
+};
+
+// Platforms
+const platforms = [
+  { x: 0, y: 360, width: 800, height: 40 },
+  { x: 200, y: 280, width: 120, height: 20 },
+  { x: 400, y: 230, width: 120, height: 20 },
+  { x: 600, y: 180, width: 120, height: 20 }
+];
+
+const gravity = 0.6;
+const keys = {};
+
+// Controls
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+function update() {
+  // Movement
+  player.dx = 0;
+  if (keys["ArrowLeft"]) player.dx = -player.speed;
+  if (keys["ArrowRight"]) player.dx = player.speed;
+
+  // Jump
+  if ((keys["ArrowUp"] || keys[" "]) && player.grounded) {
+    player.dy = -player.jumpPower;
+    player.grounded = false;
+  }
+
+  // Apply gravity
+  player.dy += gravity;
+
+  player.x += player.dx;
+  player.y += player.dy;
+
+  // Collision with platforms
+  player.grounded = false;
+  platforms.forEach(p => {
+    if (
+      player.x < p.x + p.width &&
+      player.x + player.width > p.x &&
+      player.y + player.height < p.y + p.height &&
+      player.y + player.height + player.dy >= p.y
+    ) {
+      player.dy = 0;
+      player.y = p.y - player.height;
+      player.grounded = true;
+    }
+  });
+
+  // Boundaries
+  if (player.x < 0) player.x = 0;
+  if (player.x + player.width > canvas.width)
+    player.x = canvas.width - player.width;
+
+  // Fall = death
+  if (player.y > canvas.height) {
+    alert("Game Over!");
+    reset();
+  }
+}
+
+function reset() {
+  player.x = 50;
+  player.y = 300;
+  player.dy = 0;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Player
+  ctx.fillStyle = "red";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+
+  // Platforms
+  ctx.fillStyle = "green";
+  platforms.forEach(p =>
+    ctx.fillRect(p.x, p.y, p.width, p.height)
+  );
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
